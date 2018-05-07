@@ -41,14 +41,14 @@ func Decode(input string) (Data, error)  {
 }
 
 func Encode(data Data) string  {
-	var result string
+	var result strings.Builder
 
 	for stanza, content := range data {
-		result += "[" + stanza +"]\n"
+		result.WriteString("[" + stanza +"]\n")
 		for key, value := range content {
-			result += key + "=" + value + "\n"
+			result.WriteString(key + "=" + value + "\n")
 		}
 	}
 
-	return result
+	return result.String()
 }
