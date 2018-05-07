@@ -1,35 +1,71 @@
 package toml
 
 import (
-	"strings"
 	"regexp"
+	"io/ioutil"
+	"strings"
 	"errors"
 )
 
 type (
-	Stanza map[string]string
-	Data map[string]Stanza
+	Title string // stanzas title
+	Key string // data key
+	Value string // data value
+
+	Stanza map[Key]Value
+	Data map[Title]Stanza
 )
 
-var ( // possible expressions
-	stanzaExpr = regexp.MustCompile(`^\s*\[(.*)\]\s*$`)
-	keyValueExpr = regexp.MustCompile(`^\s*(\w*)\s*=\s*(.*)\s*$`)
-	commentExpr = regexp.MustCompile(`^\s*#.*$`)
-)
+func (data Data) SetStanza(title Title, stanza Stanza) {
+	data[title] = stanza
+}
 
-func Decode(input string) (Data, error)  {
-	result := make(Data)
+func (data Data) GetStanza(title Title) (Stanza, bool) {
+	stanza, exists := data[title]
+	return stanza, exists
+}
+
+func (data Data) SetValue(title Title, key Key, value Value) {
 	var stanza Stanza
+	var exists bool
+	if stanza, exists = data[title]; !exists {
+		stanza = Stanza{}
+		data[title] = stanza
+	}
+	stanza[key] = value
+}
 
-	for _, line := range strings.Split(input, "\n") {
-		if match := stanzaExpr.FindStringSubmatch(line); len(match) > 0 {
-			stanza = make(map[string]string)
-			result[match[1]] = stanza
+func (data Data) GetValue(title Title, key Key) (Value, bool) {
+	var stanza Stanza
+	var exists bool
+	if stanza, exists = data.GetStanza(title); !exists {
+		return "", false
+	}
+	return stanza[key], true
+}
+
+func (data Data) Read(filename string) error {
+	var ( // supported expressions
+		stanzaTitleExpr = regexp.MustCompile(`^\s*\[(.*)\]\s*$`)
+		keyValueExpr = regexp.MustCompile(`^\s*(\w*)\s*=\s*(.*)\s*$`)
+		commentExpr = regexp.MustCompile(`^\s*#.*$`)
+	)
+	bytes, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	// read data from file
+	var stanza Stanza
+	for _, line := range strings.Split(string(bytes), "\n") {
+		if match := stanzaTitleExpr.FindStringSubmatch(line); len(match) > 0 {
+			stanza = Stanza{}
+			data.SetStanza(Title(match[1]), stanza)
 		} else if match := keyValueExpr.FindStringSubmatch(line); len(match) > 0 {
 			if stanza == nil {
-				return nil, errors.New("key-value pair without stanza: " + line)
+				return errors.New("key-value pair without stanza: " + line)
 			}
-			stanza[match[1]] = match[2]
+			stanza[Key(match[1])] = Value(match[2])
 		} else if commentExpr.MatchString(line) {
 			// a comment - do nothing
 		} else {
@@ -37,18 +73,18 @@ func Decode(input string) (Data, error)  {
 		}
 	}
 
-	return result, nil
+	return nil
 }
 
-func Encode(data Data) string  {
+func (data Data) Write(filename string) error {
 	var result strings.Builder
 
 	for stanza, content := range data {
-		result.WriteString("[" + stanza +"]\n")
+		result.WriteString("[" + string(stanza) +"]\n")
 		for key, value := range content {
-			result.WriteString(key + "=" + value + "\n")
+			result.WriteString(string(key) + "=" + string(value) + "\n")
 		}
 	}
 
-	return result.String()
+	return ioutil.WriteFile(filename, []byte(result.String()), 0644) // rw-r--r--
 }
